@@ -17,21 +17,34 @@ class WaveformRecorderController extends ChangeNotifier {
   ///
   /// [interval] determines how often amplitude data is emitted (default is
   /// 250ms). [encoder] specifies the audio encoding format (default is
-  /// platform-dependent).
+  /// platform-dependent). [config] sets other settings like bit rate, sample rate, etc.
   WaveformRecorderController({
     this.interval = const Duration(milliseconds: 250),
-    this.encoder = kIsWeb ? AudioEncoder.wav : AudioEncoder.aacLc,
-  });
+    @Deprecated('Use config instead')
+    AudioEncoder? encoder,
+    RecordConfig? config,
+  }) : config = RecordConfig(
+          encoder: encoder ?? config?.encoder ?? (kIsWeb ? AudioEncoder.wav : AudioEncoder.aacLc),
+          numChannels: config?.numChannels ?? 1,
+          bitRate: config?.bitRate ?? 128000,
+          sampleRate: config?.sampleRate ?? 44100,
+          device: config?.device,
+          autoGain: config?.autoGain ?? false,
+          echoCancel: config?.echoCancel ?? false,
+          noiseSuppress: config?.noiseSuppress ?? false,
+          androidConfig: config?.androidConfig ?? const AndroidRecordConfig(),
+          iosConfig: config?.iosConfig ?? const IosRecordConfig(),
+        );
 
   /// The interval at which amplitude data is emitted during recording.
   ///
   /// This determines how frequently the waveform is updated. Default is 250ms.
   final Duration interval;
 
-  /// The audio encoding format used for recording.
+  /// The audio config used for recording.
   ///
-  /// Default is platform-dependent: WAV for web, AAC-LC for other platforms.
-  final AudioEncoder encoder;
+  /// Enconde default is platform-dependent: WAV for web, AAC-LC for other platforms.
+  final RecordConfig config;
 
   Stream<waveform.Amplitude>? _amplitudeStream;
   AudioRecorder? _audioRecorder;
@@ -102,8 +115,7 @@ class WaveformRecorderController extends ChangeNotifier {
     // start the recording into a temp file (or in memory on the web)
     _startTime = DateTime.now();
     _length = Duration.zero;
-    final config = RecordConfig(encoder: encoder, numChannels: 1);
-    final ext = _extFor(encoder);
+    final ext = _extFor(config.encoder);
     final path = await PlatformHelper.getTempPath(ext);
     await _audioRecorder!.start(config, path: path);
     _stopwatch.start();
@@ -129,7 +141,7 @@ class WaveformRecorderController extends ChangeNotifier {
 
     final path = await _audioRecorder!.stop() ?? '';
     if (path.isNotEmpty) {
-      _file = _fileFor(encoder, path);
+      _file = _fileFor(config.encoder, path);
       _length = _stopwatch.elapsed;
     }
 
@@ -211,10 +223,7 @@ class WaveformRecorderController extends ChangeNotifier {
   }
 
   String _extFor(AudioEncoder encoder) => switch (encoder) {
-        AudioEncoder.aacLc ||
-        AudioEncoder.aacEld ||
-        AudioEncoder.aacHe =>
-          'm4a',
+        AudioEncoder.aacLc || AudioEncoder.aacEld || AudioEncoder.aacHe => 'm4a',
         AudioEncoder.amrNb || AudioEncoder.amrWb => '3gp',
         AudioEncoder.opus => 'opus',
         AudioEncoder.flac => 'flac',
